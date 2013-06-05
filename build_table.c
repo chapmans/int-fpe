@@ -1,0 +1,45 @@
+#include "fpe.h"
+
+/*
+ * Parameters:
+ *   delta: the transition table for the DFA.  Rows = states, cols = letter
+ *   states: the number of states
+ *   radix: the number of letters
+ *   length: the length of the input
+ *   accepters: a list of accepting states
+ *   accNum: how many accepting states
+ */
+int **
+build_table( DFA * dfa, int radix, int length ){
+
+  int ** table;
+  int i,j,k;
+
+  /* Create space for the table so that it is array index-able */
+  table = (int **) malloc( dfa->numStates * 4 );
+  for( i=0; i<dfa->numStates; i++ ){
+    table[i] = (int *) malloc( (length + 1) * 4 );
+  }
+
+  /* Initializes the first column of the table */
+  for( i=0; i<dfa->numStates; i++ ){
+    table[i][0] = 0;
+    for( j=0; j<dfa->numAccept; j++ ){
+      if( i == dfa->finalStates[j] )
+        table[i][0] = 1;
+    }
+  }
+
+ /* Finish building the table */
+  for( i=1; i<=length; i++ ){
+    for( j=0; j<dfa->numStates; j++ ){
+      table[j][i] = 0;
+      for( k=0; k<radix; k++ ){
+        table[j][i] += table[dfa->delta[j][k]][i-1];
+      }
+    }
+  }
+
+  return table;
+}
+
