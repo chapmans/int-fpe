@@ -1,223 +1,258 @@
-#include <stdlib.h>
-#include <stdio.h> 
+#include "nfa.h"
 
-typedef struct nfa_node NODE;
-typedef struct nfa_el EL;
-typedef struct nfa_set SET;
-typedef struct dfa_node DNODE;
-typedef struct dfa_el DFA;
+static int nsize = 1;
+ALPHA* alphabet;
 
-struct nfa_el {
-  NODE *start0;      // start0 = concat, start1 = union
-  NODE *start1;
-  NODE *cur;
-  char *back;
-};
-
-static int vi = 0;
-static int nsize = 0;
-static int dsize = 1;
-static DNODE* root;
-
-struct nfa_node {
-  int c;             // character; range: 32-126. 127=branch, 128=start/blank
-  NODE *n;           // next state to go to
-  NODE *n1;          // next state to go to (if branch)
-  int r;             // arbitrary assigned value
-  int accept;
-  int v;
-};
-
-struct dfa_node {
-  SET *s;
-  DNODE *next[95];   // 126 - 32 + 1 valid chars
-  int at;
-  int done;
-  int label;
-
-  DNODE *l; // used for tree traversal to check if sets are equivalent
-  DNODE *r;
-};
-
-struct dfa_el {
-  char* alphabet;
-  int ** delta;      // transition table (as an int **)
-  int * finalStates; // accepting states (int *)
-  int numAccept;     // number of accepting states (int)
-  int numStates;     // number of states (int)
-  int start;         // start state (int)
-};
-
-struct nfa_set {
-  NODE **ns;
-  int num;
-  int accept;
-};
-
-EL* to_nfa(EL *begin, char *regex) {
-  NODE* start0 = begin->start0;
-  NODE* start1 = begin->start1;
-  NODE* cur = begin->cur;
-  NODE** accepts = (NODE**) malloc(5*sizeof(NODE));
-  accepts[0] = cur;
-  int ac = 0;
-
-  EL* re = (EL*) malloc(sizeof(EL));
+NODE* build_nfa(char* regex) {
+  alphabet = (ALPHA*) malloc(sizeof(ALPHA));
   
-  char* i;
+  NODE *start = (NODE*) malloc(sizeof(NODE));
+  start->c = EP;
+  start->accept = 1;
+  start->id = 0;
+  
+  NFA *begin = (NFA*) malloc(sizeof(NFA));
+  begin->start_c = start;
+  begin->start_s = start;
+  begin->cur = start;
+
+  to_nfa(begin, regex);
+  //printf("root: %d\n", begin->start_c->id); 
+  return begin->start_c;
+}
+
+/* to_nfa
+ * Converts a regular expression into an NFA.
+ */
+NFA* to_nfa(NFA *begin, char *regex) {
+  
+  /* creates a node for the NFA */
+  NODE* start_c = begin->start_c; // concat start: beginning
+  NODE* start_s = begin->start_s; // star start: beginning
+  NODE* cur = begin->cur;         // current node: beginning
+  int curaccept = 0;
+  int acceptsize = 5;
+  NODE** accepts = (NODE**) calloc(acceptsize,sizeof(NODE));
+  accepts[curaccept] = cur;     // add current node to array of accepting nodes
+
+  NFA* re = (NFA*) malloc(sizeof(NFA));
+  int temp;
+
+  char* i; // go through each character of the regex
   for (i = regex; *i; i++) {
+
     /* allocate nodes to be filled in */
     NODE* m = (NODE*) malloc(sizeof(NODE));
-    m->r = nsize++;
-    //printf("*i: %c\n", *i); 
+    m->v = -1;
+    m->id = nsize++;
+    
     switch(*i) {
       case '\\': // escape sequence
         i++;
-        if (*i == '\\') {
-          m->c = '\\';
-        } else if (*i == '*') {
-          m->c = '*';
-        } else if (*i == '+') {
-          m->c = '+';
-        } else if (*i == '|') { 
-          m->c = '|';
-        } else if (*i == '(') {
-          m->c = '(';
-        } else if (*i == ')') {
-          m->c = ')';
-        } else if (*i == 'd') {
-          // allow decimals
-        } else {
-          break;
-        }
+        if (*i == '\\') m->c = '\\';
+        else if (*i == '*') m->c = '*';
+        else if (*i == '+') m->c = '+';
+        else if (*i == '|') m->c = '|';
+        else if (*i == '(') m->c = '(';
+        else if (*i == ')') m->c = ')';
+        else if (*i == 'd') m->c = DIGITS; // allow decimals
+        else break;
+
         m->accept = 1;
-        accepts[ac] = m;
+        accepts[curaccept] = m;
         cur->n = m;
         cur->accept = 0;
-        cur = m;
         
-        //printf("char: %c\n", m->c);
-        start1 = cur;
+        cur = m;
+        start_s = cur;
         break;
       case '*':
-        m->c = start1->c;
-        m->n = start1->n;
-        m->n1 = start1->n1;
-        m->accept = start1->accept;
-        start1->c = (char) 127;
-        start1->n1 = m;
-        start1->accept = 1;
-        accepts[ac] = m;
+        temp = m->id;
+        m->c = start_s->c;    // set node to be contents of star start
+        m->n = start_s->n;
+        m->n1 = start_s->n1;
+        m->id = start_s->id;
+        m->accept = start_s->accept;
+
+        start_s->c = BRANCH;
+        start_s->n = start_s;
+        start_s->n1 = m;
+        start_s->id = temp;
+        start_s->accept = 1;
+        accepts[curaccept] = m;
       
-        //NODE* m1 = (NODE*) malloc(sizeof(NODE));
-        if (start1 == cur) {
-          cur = m;
-        }
-        cur->n = start1; // loop back current to m
+        if (start_s == cur) cur = m;
+        cur->n = start_s; // loop back current to m
         cur->accept = 0;
         
         //printf("*: %c(%d) to %c(%d)\n", m->n->c,m->n->c,cur->c, cur->c);
-        cur = start1;
+        cur = start_s;
         break;
       case '+':
         break;
       case '|':
-        m->c = start0->c; 
-        m->n = start0->n;
-        m->n1 = start0->n1;
-        m->accept = start0->accept;
-        start0->c = (char) 127; // split node into start/cur and post-cur
-        start0->n1 = m;
-        start0->accept = 0;
+        temp = m->id;
+        m->c = start_c->c; 
+        m->n = start_c->n;
+        m->n1 = start_c->n1;
+        m->id = start_c->id;
+        m->accept = start_c->accept;
+
+        NODE* m1 = (NODE*) malloc(sizeof(NODE));
+        m1->c = EP;
+        m1->id = nsize++;
+        //printf("m1->id %d\n", m1->id);
+        m1->v = -1;
+        m1->accept = 1;
+
+        start_c->c = BRANCH; // split node into start/cur and post-cur
+        start_c->n = m1;
+        start_c->n1 = m;
+        start_c->id = temp;
+        start_c->accept = 0;
+
+        /*if (begin->start_c->id == m->id) {
+          begin->start_c = start_c;
+        }*/
 
         cur->accept = 1;
-        accepts[ac++] = cur;
-        accepts[ac] = m;
+        accepts[curaccept++] = cur;
+        accepts[curaccept] = m1;
 
-        //printf("|: %c(%d) to %c(%d)\n", m->n->c, m->n->c, cur->c, cur->c);
-        cur = start0;
+        //printf("or");
+        NODE* qq = m;
+        /*printf("\t %d(%d)",qq->id, qq->c);
+        while ((qq = qq->n) != NULL) {
+          printf("\t %d(%d)",qq->id, qq->c);
+        }
+        printf("\n");
+        qq = m;
+        while ((qq = qq->n1) != NULL) {
+          printf("\t %d(%d)", qq->id, qq->c);
+          NODE* tt = qq;
+          printf("\n\t");
+          while((tt = tt->n) != NULL) {
+            printf("\t %d(%d)", qq->id, qq->c);
+          }
+        }*/
+        //printf("\n");
+
+        cur = m1;
         break;
       case '(':
-        m->c = (char) 128;
+        m->c = EP;
         m->accept = 1;
+        
         cur->n = m;
         cur->accept = 0;
-        re->start0 = m;
-        re->start1 = m;
+       
+        re->start_c = m;
+        re->start_s = m;
         re->cur = m;
         re = to_nfa(re, i+1);
 
-        start0 = re->start0;
-        start1 = re->start0;
+        start_c = re->start_c;
+        start_s = re->start_s;
         cur = re->cur;
-        accepts[ac] = cur;
+        accepts[curaccept] = cur;
         i = re->back;
+        
         break;
       case ')':
-        m->c = 128;
+        m->c = EP;
         m->accept = 1;
         int j;
-        for (j = 0; j <= ac; j++) {
+        for (j = 0; j <= curaccept; j++) {
           accepts[j]->accept = 0;
           accepts[j]->n = m;
         }
-        ac = 0;
-
-        re->start0 = begin->start0;
-        re->start1 = begin->start0;
+        //free(begin);
+        // curaccept = 0;
+        re->start_c = begin->start_c;
+        re->start_s = begin->start_c;
         re->cur = m;
         re->back = i;
         return re;
         break;
       default: // any letter
-        m->c = *i; // next node: add letter i as transition
+        m->c = *i;
         m->accept = 1;
-        accepts[ac] = m;
+        accepts[curaccept] = m;
 
         cur->n = m; // this node: to next node
         cur->accept = 0;
 
         //printf("char: %c\n", m->c);
         cur = m; // point to next node
-        start1 = cur;
+        start_s = cur;
+    }
+    if (!(m->c == EP || m->c == BRANCH)) {
+      alphabet->in[m->c - 32] = 1; // add to array of used characters
     }
     //printf("added %c, %d \n", cur->c, cur->accept);
-
+    if (curaccept >= acceptsize) {
+      acceptsize += 5;
+      accepts = (NODE**) realloc(accepts, acceptsize*sizeof(NODE));
+    }
   }
+
   NODE* m = (NODE*) malloc(sizeof(NODE));
-  m->r = nsize++;
-  m->c = 128;
+  m->c = EP;
+  m->id = nsize++;
+  m->v = -1;
   m->accept = 1;
   int j;
-  for (j = 0; j <= ac; j++) {
+  for (j = 0; j <= curaccept; j++) {
     accepts[j]->accept = 0;
     accepts[j]->n = m;
   }
-  re->start0 = begin->start0;
-  re->start1 = start1;
-  re->cur = cur;
-  return re;
+  free(accepts);
+  free(re);
+  return begin;
 }
 
+/* traverse
+ * Traverses the NFA.
+ */
 int traverse(NODE *nd) {
-  while (nd != NULL) {
-   if (nd->accept == 1) {
-     //printf("\n");
-   }
-   if(nd->c == 128 || nd->c == -128) {
-     nd = nd->n;
-     //printf("-");
-   }
-   else if (nd->c == 127) {
-     //printf("split\n");
-     //printf("<");
-     traverse(nd->n1);
-     nd = nd->n;
-   } else {
-     //printf("%c", nd->c);
-     nd = nd->n;
-   }
+  int visited[nsize];
+  int k;
+  for (k = 0; k < nsize; k++) {
+    visited[k] = 0;
   }
+  int level = 0;
+   if (nd->accept == 1) {
+     printf("[");
+   }
+   
+   printf("%c(%d)/%d\n", nd->c, nd->c, nd->id);
+   visited[nd->id] = 1;
+
+   if (nd->accept == 1) {
+     printf("]");
+   }
+   rtraverse(nd->n, level+1, visited);
+  if (nd->c == BRANCH) rtraverse(nd->n1, level+1, visited);
+  return 0;
+
+}
+
+int rtraverse(NODE *nd, int level, int* visited) {
+  if (nd == NULL) return 0;
+  if (visited[nd->id] == 1) return 0;
+  int w;
+  for (w = 0; w < level; w++) {
+    printf("\t");
+  }
+  if (nd->accept == 1){
+    printf("*");
+  }
+
+  printf("%c(%d)/%d\n", nd->c, nd->c, nd->id);
+  visited[nd->id] = 1;
+
+  rtraverse(nd->n, level+1, visited);
+  if (nd->c == BRANCH) rtraverse(nd->n1, level+1, visited);
   return 0;
 }
 
@@ -229,9 +264,9 @@ int checkmatch(NODE* nd, char* l) {
   if (nd->accept) {
     if (!*l) return 1;
   }
-  if (nd->c == 128 || nd->c == -128) {
+  if (nd->c == EP) {
     m = checkmatch(nd->n, l);
-  } else if (nd->c == 127) {
+  } else if (nd->c == BRANCH) {
     m = checkmatch(nd->n1, l);
     if (m == 0) {
       m = checkmatch(nd->n, l);
@@ -242,252 +277,27 @@ int checkmatch(NODE* nd, char* l) {
     } else {
       m = checkmatch(nd->n, ++l); 
     }
-  }
+ }
   //printf("%d", m);
   return m;
 }
 
-static int valcmp(const void *a, const void *b) {
-  NODE *s = (NODE*) a;
-  NODE *t = (NODE*) b;
 
-  if (s->r > t->r) {
-    return 1;
-  } else if (s->r < t->r) {
-    return -1;
-  } else {
-    return 0;
-  }
-
-}
-
-static int setcmp(SET *a, SET *b) {
-  if (a->num > b->num) return 1;
-  else if (a->num < b->num) return -1;
+/* build_alphabet
+ * Builds the alphabet based on the characters used.
+ */
+ALPHA* build_alphabet() {
   
-  NODE** u = a->ns;
-  NODE** v = b->ns;
-
-  int y;
-  for(y = 0; y < a->num; y++) {
-    if (u[y]->r < v[y]->r) {
-      return -1;
-    } else if (u[y]->r > v[y]->r) {
-      return 1;
+  int count = 0;
+  int i;
+  for (i = 0; i < 95; i++) {
+    if (alphabet->in[i] == 1) {
+      alphabet->out[count] = i+32;
+      alphabet->in[i] = count;
+      count++;
     }
   }
-  return 0;
-}
+  alphabet->alen = count;
 
-SET* eset(SET* nodes, NODE* nd) {
-  if (nd == NULL) return nodes;
-  if (nd->v == vi) return nodes;
-  char c = nd->c;
-  if (c == 128 || c == -128) {
-    nodes->ns[nodes->num++] = nd; // add empty node to set
-    if (nd->accept == 1) nodes->accept = 1;
-    nd->v = vi;
-    nodes = eset(nodes, nd->n);
-  } else if (c == 127) { // add branched nodes to set
-    nodes->ns[nodes->num++] = nd;
-    if (nd->accept == 1) nodes->accept = 1;
-    nd->v = vi;
-    nodes = eset(nodes, nd->n);
-    nodes = eset(nodes, nd->n1);
-  }
-  return nodes;
-}
-
-int build_dfa(NODE* nd) {
-  printf("building dfa\n");
-  /* create set */
-  SET *startset = (SET*) malloc(sizeof(SET));
-  startset->num = 1;
-
-  /* add current (first) nfa node into set */
-  startset->ns = (NODE**) malloc(sizeof(NODE*)*5);
-  startset->ns[0] = nd;
-  if (nd->accept == 1) startset->accept = 1;
-  else startset->accept = 0;
-
-  // create dfa node
-  DNODE *dfanode = (DNODE*) malloc(sizeof(DNODE));
-  dfanode->s = startset; // set of dfa node
-  dfanode->at = 0;
-  dfanode->label = dsize++;
-  vi = 1;
-  nd->v = vi;
-  startset = eset(startset, nd->n); // grab ep-closure
-  if (nd->c == 127) eset(startset, nd->n1);
-  qsort(startset->ns, startset->num, sizeof(startset->ns[0]), valcmp); // sort states
-  root = dfanode;
-  printf("dfa started\n");
-  
-  /* create dfa with this starting node */
-  to_dfa(dfanode);
-  return 0;
-}
-
-DNODE* get_dnode(SET* s) {
-  qsort(s->ns, s->num, sizeof(s->ns[0]), valcmp); // sort states
-
-  // see if there exists a dfa node that already matches the set
-  DNODE* t = root;
-  int last = 0;
-  DNODE* prev;
-  int y;
-  while (t != NULL) {
-    prev = t;
-    y = setcmp(s, t->s);
-    if (y == -1) {
-      last = -1;
-      t = t->l;
-    } else if (y == 1) {
-      last = 1;
-      t = t->r;
-    } else {
-      free(s);
-      return t;
-    }
-  }
-
-  // create dfa node if one doesn't exist
-  DNODE* newnode = (DNODE*) malloc(sizeof(DNODE));
-  newnode->label = dsize++;
-  newnode->s = s;
-  newnode->at = 0;
-  if (last == -1) prev->l = newnode; // insert into tree
-  else prev->r = newnode;
-  return newnode;
-}
-
-DNODE* node2d(NODE* nd, DNODE* place) {
-  if (nd == NULL) return NULL;
-  
-  char c = nd->c; // get character of node  
-  printf("node char: %c (%d)\n", c, c);
-
-  if (c >= 32 && c <= 126) { // check if node is a character
-    /* create set */
-    SET *sset = (SET*) malloc(sizeof(SET));
-    sset->num = 1;
-    sset->ns = (NODE**) malloc(sizeof(NODE*) * 5);
-    sset->ns[0] = nd; // add nfa node into set
-    sset->accept = nd->accept == 1 ? 1 : 0;
-    
-    /* get set of nodes */
-    vi++;
-    nd->v = vi;
-    eset(sset, nd->n); // get set of nodes
-    if (nd->c == 127) eset(sset, nd->n1);
-    int q;
-    printf("set: ");
-    for (q = 0; q < sset->num; q++) {
-      printf("%d(%c) ", sset->ns[q]->r, sset->ns[q]->c);
-    }
-    printf("\n");
-
-    /* get/create dfanode corresponding to set */
-    DNODE* dn = get_dnode(sset);
-    place->next[c-32] = dn; // link dfa node to transitions
-    return dn;
-  }
-  return NULL;
-}
-
-int to_dfa(DNODE* lastnode) {
-  
-  if (lastnode->done == 1) return 0; // return if last node was completed
-  lastnode->done = 1;
-  SET *s = lastnode->s;
-  int m = lastnode->at;
-
-  printf("iterating\n");
-
-  /* go through nodes of the set */
-  for (m = 0; m < s->num; m++) { 
-    printf("%d %d\n", lastnode->at, m);
-    //if (lastnode->at > m) return 0;
-    //lastnode->at = m;
-    NODE* b = s->ns[m];
-    DNODE* x = node2d(b->n, lastnode);
-    DNODE* y = NULL;
-    if (b->c == 127) y = node2d(b->n1, lastnode);
-    
-    printf("dfa node %x to node %x\n", &lastnode, &x);
-      
-    if (x != NULL) to_dfa(x);
-    if (y != NULL) to_dfa(y);
-  
-    //m = lastnode->at;
-  }
-
-  return 0;
-}
-
-DFA* get_dfa() {
-  DFA* dfa = (DFA*) malloc(sizeof(DFA));
-
-}
-
-int** build_transition_table(DNODE* p) {
-  int u;
-  for (u = 0; u < 95; u++) {
-    printf("%c ", u+32);
-  }
-  printf("\n");
-  printf("label %d (%d)\n", p->label, p->s->accept);
-  for (u = 0; u < 95; u++) {
-    if (p->next[u] != NULL) {
-      printf("%d ",p->next[u]->label);
-    } else {
-      printf("0 ");
-    }
-  }
-  printf("\n");
-  tree_table(p->l);
-  tree_table(p->r);
-  printf("\n");
-  return 0;
-}
-
-int tree_table(DNODE* p) {
-  if (p == NULL) return 0;
-  int u;
-  printf("label %d (%d)\n", p->label, p->s->accept);
-  for (u = 0; u < 95; u++) {
-    if (p->next[u] != NULL) {
-      printf("%d ", p->next[u]->label);
-    } else {
-      printf("0 ");
-    }
-  }
-  printf("\n");
-  tree_table(p->l);
-  tree_table(p->r);
-  return 0;
-}
-
-int main(int argc, char *argv[]) {
-  printf("args: %d\n", argc);
-  NODE *st = (NODE*) malloc(sizeof(NODE));
-  EL *begin = (EL*) malloc(sizeof(EL));
-  st->c = (char) 128;
-  st->accept = 1;
-  st->r = nsize++;
-  begin->start0 = st;
-  begin->start1 = st;
-  begin->cur = st;
-  EL *re;
-  if (argc >= 2) {
-    re = to_nfa(begin, argv[1]);  
-    build_dfa(re->start0);
-    build_transition_table(p);
-  }
-  if (argc == 3) {
-    int k = checkmatch(re->start0, argv[2]);
-    if (k == 0) printf("match: false\n");
-    else printf("match: true\n");
-  }
-  //traverse(re->start0);
+  return alphabet;
 }
