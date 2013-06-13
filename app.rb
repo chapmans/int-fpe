@@ -2,6 +2,7 @@ require 'sinatra'
 require 'rubygems'
 require 'ffi'
 require 'openssl'
+require 'haml'
 
 module FPELib
   extend FFI::Library
@@ -10,6 +11,7 @@ module FPELib
   attach_function :do_fpe, [:string, :string, :pointer], :string
 end
 
+set :app_file, __FILE__
 
 get '/' do
   cipher = OpenSSL::Cipher.new('AES-128-CBC')
