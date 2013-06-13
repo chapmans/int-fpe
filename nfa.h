@@ -1,8 +1,8 @@
-#define BRANCH 127
-#define EP 128
-#define DIGITS 129
-#define UPPERS 130
-#define LOWERS 131
+#define BRANCH 130
+#define EP 131
+#define DIGITS 127
+#define UPPERS 128
+#define LOWERS 129
 
 typedef struct ALPHA ALPHA;
 typedef struct NODE NODE;
@@ -24,6 +24,7 @@ struct NODE {
   int id;           // id value for node
   int accept;       // if it's an accept state
   int v;            // used to mark if visited when building DFA
+  NODE* l;            // linked list for freeing the struct
 };
 
 struct NFA {
@@ -64,25 +65,27 @@ extern DNODE* droot;      // DFA node root
 extern ALPHA* alphabet;
 
 /* to_nfa methods */
-NODE* build_nfa(char* regex);
-NFA* to_nfa(NFA *begin, char *regex);
-int traverse(NODE *nd);
-ALPHA* build_alphabet();
-int checkmatch(NODE *nd, char* l);
+NODE*   build_nfa(char* regex);
+NFA*    to_nfa(NFA *begin, char *regex);
+int     traverse(NODE *nd);
+ALPHA*  build_alphabet();
+int     checkmatch(NODE *nd, char* l);
 
 /* to_dfa methods */
 static int valcmp(const void* a, const void* b);
 static int setcmp(SET *a, SET *b);
-SET* get_closure(SET* nodes, NODE* nd);
-DNODE* node2d(NODE* nd, DNODE* place);
-DNODE* get_dnode(SET* s);
-DNODE* build_dfa(NODE* nd);
-int to_dfa(DNODE* lastnode);
-int** build_transition_table(DNODE* p);
-int** tree_table(DNODE* p, int** delta);
-int* get_accepting(DNODE* p);
-int find_accepting(int* finstates, DNODE* p, int c);
-int finish(DNODE* p);
+SET*       get_closure(SET* nodes, NODE* nd);
+DNODE*     node2d(NODE* nd, DNODE* place);
+DNODE*     get_dnode(SET* s);
+DNODE*     build_dfa(NODE* nd);
+int        to_dfa(DNODE* lastnode);
+int**      build_transition_table(DNODE* p);
+int**      tree_table(DNODE* p, int** delta);
+int*       get_accepting(DNODE* p);
+int        find_accepting(int* finstates, DNODE* p, int c);
+int        finish(DNODE* p);
+
+char*  do_fpe(char* regex, char* message, void* key);
 
 #include <stdlib.h>
 #include <stdio.h>

@@ -97,7 +97,7 @@ DNODE* node2d(NODE* nd, DNODE* place) {
   int c = nd->c; // get character of node  
   //printf("node char: %c (%d) (%d)\n", c, c, nd->accept);
 
-  if (c >= 32 && c <= 126) { // check if node is a character
+  if (c >= 32 && c <= 129) { // check if node is a character
     /* create set */
     SET *startset = (SET*) malloc(sizeof(SET));
     startset->num = 1;
@@ -122,7 +122,15 @@ DNODE* node2d(NODE* nd, DNODE* place) {
 
     /* get/create dfanode corresponding to set */
     DNODE* dn = get_dnode(startset);
-    place->next[alphabet->in[c-32]] = dn; // link dfa node to transitions
+    char l;
+    if (c == DIGITS)
+      for (l = '0'; l <= '9'; l++) place->next[alphabet->in[l-32]] = dn;
+    else if (c == LOWERS)
+      for (l = 'a'; l <= 'z'; l++) place->next[alphabet->in[l-32]] = dn;
+    else if (c == UPPERS)
+      for (l = 'A'; l <= 'Z'; l++) place->next[alphabet->in[l-32]] = dn;
+    else
+      place->next[alphabet->in[c-32]] = dn; // link dfa node to transitions
     return dn;
   }
   return NULL;
@@ -193,7 +201,7 @@ DNODE* build_dfa(NODE* nd) {
   nd->v = visiting;
   //printf("closure: \n [%d]", nd->id);
   startset = get_closure(startset, nd->n); // grab ep-closure
-  if (nd->c == BRANCH) get_closure(startset, nd->n1);
+  if (nd->c == BRANCH) startset = get_closure(startset, nd->n1);
   //printf(" [size %d]\n", startset->num);
   qsort(startset->ns, startset->num, sizeof(NODE*), valcmp); // sort states
   droot = dfanode;
@@ -225,9 +233,11 @@ int to_dfa(DNODE* lastnode) {
     NODE* b = s->ns[m];
     if (b != NULL) {
     //printf("set %d @ %d\n", lastnode->id, b->id);
-      DNODE* x = node2d(b->n, lastnode);
+      DNODE* x = NULL;
       DNODE* y = NULL;
-      if (b->c == BRANCH) y = node2d(b->n1, lastnode);
+
+      if (b->n != NULL) x = node2d(b->n, lastnode);
+      if (b->c == BRANCH && b->n1 != NULL) y = node2d(b->n1, lastnode);
     
       //printf("dfa node %x to node %x\n", &lastnode, &x);
       
@@ -275,9 +285,15 @@ int** build_transition_table(DNODE* p) {
   //printf("id %d\n", p->id);
   for (i = 0; i < alphabet->alen; i++) {
     delta[0][i] = 0;
-    if (p->next[i] != NULL)
-      delta[p->id][i] = p->next[i]->id; 
-    else
+    if (p->next[i] != NULL) {
+      delta[p->id][i] = p->next[i]->id;
+      /*int k;
+      printf("adding %d: ", p->next[i]->id);
+      for (k = 0; k < p->next[i]->s->num; k++) {
+        printf("%d ", p->next[i]->s->ns[k]->id);
+      }
+      printf("\n");*/
+    } else
       delta[p->id][i] = 0;
   }
   tree_table(p->l, delta);
@@ -285,11 +301,13 @@ int** build_transition_table(DNODE* p) {
   int j;
   printf("\n");
   for (i = 0; i < dsize; i++) {
-    printf("%2d: ", i);
-    for (j = 0; j < alphabet->alen; j++) {
-      printf("%2d ", delta[i][j]);
+    if (delta[i] != NULL) {
+      printf("%2d: ", i);
+      for (j = 0; j < alphabet->alen; j++) {
+        printf("%2d ", delta[i][j]);
+      }
+      printf("\n");
     }
-    printf("\n");
   }
   /*printf("\n");
   printf("label %d (%d)\n", p->id, p->s->accept);
@@ -317,9 +335,15 @@ int** tree_table(DNODE* p, int** delta) {
   int i;
   //printf("id %d\n", p->id);
   for (i = 0; i < alphabet->alen; i++) {
-    if (p->next[i] != NULL)
+    if (p->next[i] != NULL) {
       delta[p->id][i] = p->next[i]->id;
-    else
+      /*int k;
+      printf("adding %d: ", p->next[i]->id);
+      for (k = 0; k < p->next[i]->s->num; k++) {
+        printf("%d ", p->next[i]->s->ns[k]->id);
+      }
+      printf("\n");*/
+    } else
       delta[p->id][i] = 0;
   }
   //printf("label %d (%d)\n", p->id, p->s->accept);
@@ -368,6 +392,9 @@ int find_accepting(int* finstates, DNODE* p, int c) {
 int finish(DNODE* p) {
   if (p->l != NULL) finish(p->l);
   if (p->r != NULL) finish(p->r);
+  free(p->s->ns);
+  free(p->s);
+  free(p->next);
   free(p);
   return 0;
 }

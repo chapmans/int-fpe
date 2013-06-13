@@ -19,7 +19,7 @@ main( int argc, char *argv[] ){
   dfa = (DFA *) malloc( sizeof( DFA ) );
 
   /* Set the transition table */
-  dfa->delta = (int **) malloc( 9*4 );
+  dfa->delta = (int **) malloc( 9*sizeof(int*) );
   for( i=0; i<9; i++ ){
     dfa->delta[i] = (int *) malloc( 36*4 );
   }
@@ -55,7 +55,7 @@ main( int argc, char *argv[] ){
   dfa->finalStates[0] = 7;
   
   /* Set the alphabet */
-  dfa->alphabet = (char *) malloc( 37 );
+  dfa->alphabet = (char *) malloc( 37*sizeof(char) );
   strcpy( dfa->alphabet, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ" );
 
   /* Miscellaineous values */

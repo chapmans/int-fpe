@@ -27,6 +27,7 @@ int main(int argc, char *argv[]) {
     comp->numAccept = accepting;
     comp->finalStates = get_accepting(droot);
     comp->numStates = dsize;
+    finish(droot);
     printf("accepting states: %d\n", accepting);
     printf("number of states: %d\n", dsize);  
   }
@@ -49,9 +50,11 @@ int main(int argc, char *argv[]) {
 
     int tweak = 0x12345678;
     char* message = argv[2];
-    char* cipher = (char*) fpe(key, tweak, comp, message);
-    printf("The encrypted string is %s\n", cipher);
+    //char* cipher = (char*) fpe(key, tweak, comp, message);
+    //printf("The encrypted string is %s\n", cipher);
 
   }
+
+  return 0;
 
 }

@@ -1,0 +1,40 @@
+!!!
+
+%html
+  %head
+    %title Blog
+
+    %link{:href => url('css/style.css'), :rel => 'stylesheet', :type => 'text/css'}
+    %link{:href => url('css/bootstrap.min.css'), :rel => 'stylesheet', :type => 'text/css'}
+
+    %script{:type => 'text/javascript', :src => url('js/zepto.min.js')}
+    %script{:type => 'text/javascript', :src => url('js/underscore-min.js')}
+    %script{:type => 'text/javascript', :src => url('js/functions.js')}
+
+  %body
+    .container
+
+      .row
+
+        .span8
+          %h1 Integer FPE
+
+          .form-horizontal#ifpe
+            .control-group
+              %label.control-label{:for => 'inputRegex'} Regex
+              .controls
+                %input#inputRegex{:type => 'text', :placeholder => 'Insert a regular expression here...'}
+            .control-group
+              %label.control-label{:for => 'inputMessage'} Message
+              .controls
+                %input#inputMessage{:type => 'text', :placeholder => 'Insert your message here...'}
+            .control-group
+              %label.control-label{:for => 'inputKey'} Key
+              .controls
+                %input#inputKey{:type => 'text', :value => @key}
+            .control-group
+              .controls
+                %button.go{:type => 'submit'} Encrypt!
+
+          .output
+            

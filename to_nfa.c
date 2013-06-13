@@ -3,14 +3,24 @@
 static int nsize = 1;
 ALPHA* alphabet;
 
+
 NODE* build_nfa(char* regex) {
   alphabet = (ALPHA*) malloc(sizeof(ALPHA));
-  
+  alphabet->alen = 0;
+  int i;
+  for (i = 0; i < 95; i++) {
+    alphabet->in[i] = 0;
+    alphabet->out[i] = 0;
+  }
+
   NODE *start = (NODE*) malloc(sizeof(NODE));
   start->c = EP;
   start->accept = 1;
   start->id = 0;
-  
+  start->n = NULL;
+  start->n1 = NULL;
+  start->l = NULL;
+
   NFA *begin = (NFA*) malloc(sizeof(NFA));
   begin->start_c = start;
   begin->start_s = start;
@@ -18,7 +28,10 @@ NODE* build_nfa(char* regex) {
 
   to_nfa(begin, regex);
   //printf("root: %d\n", begin->start_c->id); 
-  return begin->start_c;
+  
+  start = begin->start_c;
+  free(begin);
+  return start;
 }
 
 /* to_nfa
@@ -30,6 +43,7 @@ NFA* to_nfa(NFA *begin, char *regex) {
   NODE* start_c = begin->start_c; // concat start: beginning
   NODE* start_s = begin->start_s; // star start: beginning
   NODE* cur = begin->cur;         // current node: beginning
+  NODE* last = begin->start_c;    // in order (for freeing nodes)
   int curaccept = 0;
   int acceptsize = 5;
   NODE** accepts = (NODE**) calloc(acceptsize,sizeof(NODE));
@@ -39,23 +53,40 @@ NFA* to_nfa(NFA *begin, char *regex) {
   int temp;
 
   char* i; // go through each character of the regex
+  
   for (i = regex; *i; i++) {
 
     /* allocate nodes to be filled in */
     NODE* m = (NODE*) malloc(sizeof(NODE));
     m->v = -1;
     m->id = nsize++;
+    m->n = NULL;
+    m->n1 = NULL;
+    m->l = NULL;
+    last->l = m;
     
     switch(*i) {
       case '\\': // escape sequence
         i++;
+        int l;
         if (*i == '\\') m->c = '\\';
         else if (*i == '*') m->c = '*';
         else if (*i == '+') m->c = '+';
         else if (*i == '|') m->c = '|';
         else if (*i == '(') m->c = '(';
         else if (*i == ')') m->c = ')';
-        else if (*i == 'd') m->c = DIGITS; // allow decimals
+        else if (*i == 'd') {
+          m->c = DIGITS; // allow decimals
+          for (l = '0'; l <= '9'; l++) alphabet->in[l-32] = 1;
+        }
+        else if (*i == 'w') {
+          m->c = LOWERS;
+          for (l = 'a'; l <= 'z'; l++) alphabet->in[l-32] = 1;
+        }
+        else if (*i == 'W') {
+          m->c = UPPERS;
+          for (l = 'A'; l <= 'Z'; l++) alphabet->in[l-32] = 1;
+        }
         else break;
 
         m->accept = 1;
@@ -103,7 +134,11 @@ NFA* to_nfa(NFA *begin, char *regex) {
         m1->id = nsize++;
         //printf("m1->id %d\n", m1->id);
         m1->v = -1;
+        m1->n = NULL;
+        m1->n1 = NULL;
         m1->accept = 1;
+        last->l = m1;
+        m1->l = m;
 
         start_c->c = BRANCH; // split node into start/cur and post-cur
         start_c->n = m1;
@@ -120,8 +155,8 @@ NFA* to_nfa(NFA *begin, char *regex) {
         accepts[curaccept] = m1;
 
         //printf("or");
-        NODE* qq = m;
-        /*printf("\t %d(%d)",qq->id, qq->c);
+        /*NODE* qq = m;
+        printf("\t %d(%d)",qq->id, qq->c);
         while ((qq = qq->n) != NULL) {
           printf("\t %d(%d)",qq->id, qq->c);
         }
@@ -154,6 +189,7 @@ NFA* to_nfa(NFA *begin, char *regex) {
         start_c = re->start_c;
         start_s = re->start_s;
         cur = re->cur;
+        last = re->cur;
         accepts[curaccept] = cur;
         i = re->back;
         
@@ -161,10 +197,12 @@ NFA* to_nfa(NFA *begin, char *regex) {
       case ')':
         m->c = EP;
         m->accept = 1;
+        //printf("id: %d\n", m->id);
         int j;
         for (j = 0; j <= curaccept; j++) {
           accepts[j]->accept = 0;
           accepts[j]->n = m;
+          //printf("aid: %d\n", accepts[j]->id);
         }
         //free(begin);
         // curaccept = 0;
@@ -194,6 +232,9 @@ NFA* to_nfa(NFA *begin, char *regex) {
       acceptsize += 5;
       accepts = (NODE**) realloc(accepts, acceptsize*sizeof(NODE));
     }
+
+    last = m;
+
   }
 
   NODE* m = (NODE*) malloc(sizeof(NODE));
@@ -201,6 +242,10 @@ NFA* to_nfa(NFA *begin, char *regex) {
   m->id = nsize++;
   m->v = -1;
   m->accept = 1;
+  m->n = NULL;
+  m->n1 = NULL;
+  m->l = NULL;
+  last->l = m;
   int j;
   for (j = 0; j <= curaccept; j++) {
     accepts[j]->accept = 0;

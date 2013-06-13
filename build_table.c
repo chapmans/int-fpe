@@ -16,7 +16,7 @@ build_table( DFA * dfa, int radix, int length ){
   int i,j,k;
 
   /* Create space for the table so that it is array index-able */
-  table = (int **) malloc( dfa->numStates * 4 );
+  table = (int **) malloc( dfa->numStates * sizeof(int*) );
   for( i=0; i<dfa->numStates; i++ ){
     table[i] = (int *) malloc( (length + 1) * 4 );
   }
