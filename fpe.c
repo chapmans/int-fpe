@@ -17,6 +17,28 @@ fpe( void * key, int tweak, DFA * dfa, char * message ){
 
   char * unranked;
 
+  int error;
+  for( i=0; i<strlen(message); i++ ){
+    error = 1;
+    for( j=0; j<strlen(dfa->alphabet); j++ ){
+      if( message[i] == dfa->alphabet[j] )
+        error = 0;
+    }
+    if( error )
+      return "";
+  }
+
+  int state = dfa->start;
+  for( i=0; i<strlen(message); i++ ){
+    state = dfa->delta[state][order[message[i]]];
+  }
+  error = 1;
+  for( i=0; i<dfa->numAccept; i++ )
+    if( state == dfa->finalStates[i] )
+      error = 0;
+  if( error )
+    return "";
+
   /* Build the table */
   int ** table;
   table = (int **) build_table( dfa, radix, length );
@@ -32,23 +54,28 @@ fpe( void * key, int tweak, DFA * dfa, char * message ){
   }
   printf("And the number of strings of length %d is %d\n", length, max );
 
-  int * rankNum = (int *) malloc( 4*4 );
+  unsigned int * rankNum = (unsigned int *) malloc( 4*sizeof(unsigned int) );
   rankNum[1] = rankNum[2] = rankNum[0] = 0;
   rankNum[3] = rank( dfa, order, table, message );
   
   /* Can remove this section as well */
   printf("\nWhen you rank %s you get %d\n", message, rankNum[3] );
 
+  int opt_out_counter = 0;
   aes_encrypt_ctx ctx[1];
   aes_encrypt_key128( key, ctx );
-  int * encNum = (int *) malloc( 4*4 );
+  unsigned int * encNum = (unsigned int *) malloc( 4*sizeof(unsigned int) );
   do{
     aes_encrypt( rankNum, encNum, ctx );
     for( i=0; i<4; i++ ){
       rankNum[i] = encNum[i];
     }
+    if(opt_out_counter > 100000)
+      break;
+    opt_out_counter++;
   } while( encNum[3] > max || encNum[3] < 0 );
 
+  encNum[3] %= max;
   printf("Encrypted number is %d\n", encNum[3] );
 
   /* Do the unranking */
@@ -58,7 +85,7 @@ fpe( void * key, int tweak, DFA * dfa, char * message ){
 }
 
 int * ord( char * alphabet ){
-  int * order = (int *) malloc( 256 * 4 );
+  int * order = (int *) malloc( 256 * sizeof(int) );
 
   int i;
   for( i = 0; i < 256; i++ ){
